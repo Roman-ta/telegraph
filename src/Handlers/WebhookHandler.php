@@ -65,9 +65,11 @@ abstract class WebhookHandler
 
     public function handle(Request $request, TelegraphBot $bot): void
     {
+
         try {
             $this->bot = $bot;
             $this->request = $request;
+
 
             if (config('telegraph.debug_mode', config('telegraph.webhook.debug'))) {
                 Log::debug('Telegraph webhook received', $this->request->all());
@@ -96,7 +98,6 @@ abstract class WebhookHandler
 
                 return;
             }
-
             // setup data
             $this->message = match (true) {
                 $this->request->has('message') => Message::fromArray($this->request->input('message')),
@@ -159,7 +160,7 @@ abstract class WebhookHandler
 
         report($throwable);
 
-        rescue(fn () => $this->reply(__('telegraph::errors.webhook_error_occurred')), report: false);
+        rescue(fn() => $this->reply(__('telegraph::errors.webhook_error_occurred')), report: false);
     }
 
     //---- Chat Setup
@@ -202,7 +203,7 @@ abstract class WebhookHandler
 
     protected function allowUnknownChat(): bool
     {
-        return (bool) match (true) {
+        return (bool)match (true) {
             isset($this->message),
             isset($this->reaction) => config('telegraph.security.allow_messages_from_unknown_chats', false),
             isset($this->callbackQuery) => config('telegraph.security.allow_callback_queries_from_unknown_chats', false),
@@ -229,7 +230,14 @@ abstract class WebhookHandler
     {
         $this->extractMessageData();
 
+
         $text = Str::of($this->message?->text() ?? '');
+
+        if ($this->message?->photos()->isNotEmpty()) {
+            $this->handlePhoto($this->message->photos(), $this->message->text());
+            return;
+        }
+
 
         if ($this->isCommand($text)) {
             $this->handleCommand($text);
@@ -251,6 +259,7 @@ abstract class WebhookHandler
             return;
         }
 
+
         $this->handleChatMessage($text);
     }
 
@@ -261,7 +270,8 @@ abstract class WebhookHandler
         $this->messageId = $this->message->id();
 
         $this->data = collect([
-            'text' => $this->message->text(),
+            'text' => $this->message->text()  ?? $this->message->caption(),
+            'photo' => $this->message->photos()
         ]);
     }
 
@@ -300,7 +310,7 @@ abstract class WebhookHandler
 
         return collect($prefixes)
             ->push('/')
-            ->map(fn (string $prefix) => str($prefix)->trim())
+            ->map(fn(string $prefix) => str($prefix)->trim())
             ->unique()
             ->values();
     }
@@ -334,7 +344,7 @@ abstract class WebhookHandler
             }
         }
 
-        return [(string) $command, (string) ($parameter ?? '')];
+        return [(string)$command, (string)($parameter ?? '')];
     }
 
     protected function canHandle(string $action): bool
@@ -448,6 +458,11 @@ abstract class WebhookHandler
         // .. do nothing
     }
 
+    protected function handleChatPhoto(Stringable $text, $photo): void
+    {
+        // .. do nothing
+    }
+
     protected function handleChatJoinRequest(ChatJoinRequest $chatJoinRequest): void
     {
         // .. do nothing
@@ -472,10 +487,13 @@ abstract class WebhookHandler
     {
         // .. do nothing
     }
+    public function handlePhoto($photo, $text)
+    {
 
+    }
     /**
-     * @param  Collection<array-key, Reaction>  $newReactions
-     * @param  Collection<array-key, Reaction>  $oldReactions
+     * @param Collection<array-key, Reaction> $newReactions
+     * @param Collection<array-key, Reaction> $oldReactions
      *
      * @return void
      */
@@ -517,4 +535,6 @@ abstract class WebhookHandler
     {
         $this->chat->html("Chat ID: {$this->chat->chat_id}")->send();
     }
+
+
 }
